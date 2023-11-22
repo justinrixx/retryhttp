@@ -2,6 +2,7 @@ package retryhttp
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -63,7 +64,7 @@ type (
 		shouldRetryFn        ShouldRetryFn
 		delayFn              DelayFn
 		preventRetryWithBody bool
-		// TODO per-attempt timeout
+		attemptTimeout       time.Duration
 	}
 )
 
@@ -109,6 +110,17 @@ func WithPreventRetryWithBody(preventRetryWithBody bool) func(*Transport) {
 	}
 }
 
+// WithAttemptTimeout configures a per-attempt timeout to be used in requests. A
+// per-attempt timeout differs from an overall timeout in that it applies to and is
+// reset in each individual attempt rather than all attempts and delays combined.
+// If using an overall timeout along with a per-attempt timeout, the stricter of
+// the two takes precedence.
+func WithAttemptTimeout(attemptTimeout time.Duration) func(*Transport) {
+	return func(t *Transport) {
+		t.attemptTimeout = attemptTimeout
+	}
+}
+
 // New is used to construct a new Transport, configured with any desired options.
 // These options include WithTransport, WithMaxRetries, WithShouldRetryFn,
 // WithDelayFn, and WithPreventRetryWithBody. Any number of options may be provided.
@@ -135,6 +147,8 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		maxRetries = *t.maxRetries
 	}
 
+	ctx := req.Context()
+
 	preventRetry := req.Body != nil && req.Body != http.NoBody && t.preventRetryWithBody
 
 	// if body is present, it must be buffered if there is any chance of a retry
@@ -153,11 +167,21 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	for {
-		res, err := t.rt.RoundTrip(req)
+		// set per-attempt timeout if needed
+		var cancel context.CancelFunc = func() {}
+		reqWithTimeout := req
+		if t.attemptTimeout != 0 {
+			var timeoutCtx context.Context
+			timeoutCtx, cancel = context.WithTimeout(ctx, t.attemptTimeout)
+			reqWithTimeout = req.WithContext(timeoutCtx)
+		}
+
+		// the actual round trip
+		res, err := t.rt.RoundTrip(reqWithTimeout)
 		attemptCount++
 
 		if preventRetry || attemptCount-1 >= maxRetries {
-			return res, err
+			return injectCancelReader(res, cancel), err
 		}
 
 		attempt := Attempt{
@@ -169,21 +193,29 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		shouldRetry := t.shouldRetryFn(attempt)
 		if !shouldRetry {
-			return res, err
+			return injectCancelReader(res, cancel), err
 		}
 
 		delay := t.delayFn(attempt)
 		if br != nil {
 			if _, serr := br.Seek(0, 0); serr != nil {
-				return res, errors.Join(err, ErrSeekingBody)
+				return injectCancelReader(res, cancel), errors.Join(err, ErrSeekingBody)
 			}
 			req.Body = io.NopCloser(br)
 		}
 
+		if res != nil {
+			_, _ = io.Copy(io.Discard, res.Body)
+			res.Body.Close()
+		}
+
+		// going for another attempt, cancel the context of the attempt that was just made
+		cancel()
+
 		select {
 		case <-time.After(delay):
-			// do nothing, just wait
-		case <-req.Context().Done():
+			// do nothing, just loop again
+		case <-req.Context().Done(): // happens if the parent context expires
 			return nil, req.Context().Err()
 		}
 	}
