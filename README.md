@@ -29,7 +29,7 @@ This package is still in development and it is not recommended for use yet.
 
 - ~~`Transport` with `New` constructor and configurable options~~
 - ~~Support for per-attempt timeouts~~
-- Ability to override options using context keys
+- ~~Ability to override options using context keys~~
 - Good default `ShouldRetryFn` and `DelayFn`
 - Helper functions for recognizing common HTTP errors
 - Tweakable versions of the default `ShouldRetryFn` and `DelayFn`

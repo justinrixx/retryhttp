@@ -68,59 +68,6 @@ type (
 	}
 )
 
-// WithTransport configures a Transport with an internal roundtripper of its own.
-// This is often http.DefaultTransport, but it could be anything else.
-func WithTransport(transport http.RoundTripper) func(*Transport) {
-	return func(t *Transport) {
-		t.rt = transport
-	}
-}
-
-// WithMaxRetries configures the maximum number of retries a Transport is allowed to make.
-// If not set, defaults to DefaultMaxRetries. Note that this number does not include the
-// initial attempt, so if this is configured as 3, there could be up to 4 total attempts.
-func WithMaxRetries(maxRetries int) func(*Transport) {
-	return func(t *Transport) {
-		t.maxRetries = &maxRetries
-	}
-}
-
-// WithShouldRetryFn configures the ShouldRetryFn callback to use.
-func WithShouldRetryFn(shouldRetryFn ShouldRetryFn) func(*Transport) {
-	return func(t *Transport) {
-		t.shouldRetryFn = shouldRetryFn
-	}
-}
-
-// WithDelayFn configures the DelayFn callback to use.
-func WithDelayFn(delayFn DelayFn) func(*Transport) {
-	return func(t *Transport) {
-		t.delayFn = delayFn
-	}
-}
-
-// WithPreventRetryWithBody configures whether to prevent retries on requests that
-// have bodies. This may be desirable because any request that has a chance of
-// requiring a retry must have its body buffered into memory by Transport in case
-// it needs to be replayed on subsequent attempts. It is up to package consumers
-// to determine if and when this behavior is appropriate.
-func WithPreventRetryWithBody(preventRetryWithBody bool) func(*Transport) {
-	return func(t *Transport) {
-		t.preventRetryWithBody = preventRetryWithBody
-	}
-}
-
-// WithAttemptTimeout configures a per-attempt timeout to be used in requests. A
-// per-attempt timeout differs from an overall timeout in that it applies to and is
-// reset in each individual attempt rather than all attempts and delays combined.
-// If using an overall timeout along with a per-attempt timeout, the stricter of
-// the two takes precedence.
-func WithAttemptTimeout(attemptTimeout time.Duration) func(*Transport) {
-	return func(t *Transport) {
-		t.attemptTimeout = attemptTimeout
-	}
-}
-
 // New is used to construct a new Transport, configured with any desired options.
 // These options include WithTransport, WithMaxRetries, WithShouldRetryFn,
 // WithDelayFn, and WithPreventRetryWithBody. Any number of options may be provided.
@@ -142,14 +89,36 @@ func New(options ...func(*Transport)) *Transport {
 // its internal Transport.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var attemptCount int
+	ctx := req.Context()
+
 	maxRetries := DefaultMaxRetries
 	if t.maxRetries != nil {
 		maxRetries = *t.maxRetries
 	}
+	ctxRetries, set := getMaxRetriesFromContext(ctx)
+	if set {
+		maxRetries = ctxRetries
+	}
 
-	ctx := req.Context()
+	shouldRetryFn := t.shouldRetryFn
+	ctxShouldRetryFn, set := getShouldRetryFnFromContext(ctx)
+	if set {
+		shouldRetryFn = ctxShouldRetryFn
+	}
 
-	preventRetry := req.Body != nil && req.Body != http.NoBody && t.preventRetryWithBody
+	delayFn := t.delayFn
+	ctxDelayFn, set := getDelayFnFromContext(ctx)
+	if set {
+		delayFn = ctxDelayFn
+	}
+
+	preventRetryWithBody := t.preventRetryWithBody
+	ctxPreventRetry, set := getPreventRetryWithBodyFromContext(ctx)
+	if set {
+		preventRetryWithBody = ctxPreventRetry
+	}
+
+	preventRetry := req.Body != nil && req.Body != http.NoBody && preventRetryWithBody
 
 	// if body is present, it must be buffered if there is any chance of a retry
 	// since it can only be consumed once.
@@ -162,17 +131,23 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 		req.Body.Close()
 
-		br := bytes.NewReader(buf.Bytes())
+		br = bytes.NewReader(buf.Bytes())
 		req.Body = io.NopCloser(br)
+	}
+
+	attemptTimeout := t.attemptTimeout
+	ctxAttemptTimeout, set := getAttemptTimeoutFromContext(ctx)
+	if set {
+		attemptTimeout = ctxAttemptTimeout
 	}
 
 	for {
 		// set per-attempt timeout if needed
 		var cancel context.CancelFunc = func() {}
 		reqWithTimeout := req
-		if t.attemptTimeout != 0 {
+		if attemptTimeout != 0 {
 			var timeoutCtx context.Context
-			timeoutCtx, cancel = context.WithTimeout(ctx, t.attemptTimeout)
+			timeoutCtx, cancel = context.WithTimeout(ctx, attemptTimeout)
 			reqWithTimeout = req.WithContext(timeoutCtx)
 		}
 
@@ -191,17 +166,17 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 			Err:   err,
 		}
 
-		shouldRetry := t.shouldRetryFn(attempt)
+		shouldRetry := shouldRetryFn(attempt)
 		if !shouldRetry {
 			return injectCancelReader(res, cancel), err
 		}
 
-		delay := t.delayFn(attempt)
+		delay := delayFn(attempt)
 		if br != nil {
 			if _, serr := br.Seek(0, 0); serr != nil {
 				return injectCancelReader(res, cancel), errors.Join(err, ErrSeekingBody)
 			}
-			req.Body = io.NopCloser(br)
+			reqWithTimeout.Body = io.NopCloser(br)
 		}
 
 		if res != nil {
