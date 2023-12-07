@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -65,6 +67,7 @@ type (
 		delayFn              DelayFn
 		preventRetryWithBody bool
 		attemptTimeout       time.Duration
+		initOnce             sync.Once
 	}
 )
 
@@ -82,19 +85,26 @@ func New(options ...func(*Transport)) *Transport {
 	return tr
 }
 
+func (t *Transport) init() {
+	t.rt = http.DefaultTransport
+	t.shouldRetryFn = DefaultShouldRetryFn
+
+	tmp := DefaultMaxRetries
+	t.maxRetries = &tmp
+}
+
 // RoundTrip performs the actual HTTP round trip for a request. It performs setup
 // and retries, but delegates the actual HTTP round trip to Transport's internal
 // roundtripper. This is not intended to be called directly, but rather implement
 // the http.RoundTripper interface so that it can be passed to a http.Client as
 // its internal Transport.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.initOnce.Do(t.init)
+
 	var attemptCount int
 	ctx := req.Context()
 
-	maxRetries := DefaultMaxRetries
-	if t.maxRetries != nil {
-		maxRetries = *t.maxRetries
-	}
+	maxRetries := *t.maxRetries
 	ctxRetries, set := getMaxRetriesFromContext(ctx)
 	if set {
 		maxRetries = ctxRetries
@@ -194,4 +204,18 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 			return nil, req.Context().Err()
 		}
 	}
+}
+
+// IsDNSErr is used to determine if an error from an attempt is due to DNS. Requests that
+// failed with a DNS error
+func IsDNSErr(err error) bool {
+	var dnse *net.DNSError
+	return errors.As(err, &dnse)
+}
+
+// IsTimeoutErr is used to determine if an error from an attempt is due to a common timeout.
+// This includes network timeouts or the context deadline being exceeded.
+func IsTimeoutErr(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
