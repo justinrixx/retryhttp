@@ -1,11 +1,31 @@
 package retryhttp
 
-import "net/http"
+import (
+	"math"
+	"math/rand"
+	"net/http"
+	"strconv"
+	"time"
+)
+
+// prng generates random numbers for calculating jitter
+var prng = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 // CustomizedShouldRetryFnOptions are used to tweak the behavior of CustomizedShouldRetryFn.
 type CustomizedShouldRetryFnOptions struct {
 	IdempotentMethods    []string
 	RetryableStatusCodes []int
+}
+
+// CustomizedDelayFnOptions are used to tweak the behavior of CustomizedDelayFn.
+// Base and Cap are used in calculating exponential backoff: min(base * (2 ** i), cap)
+// JitterMagnitude determines the maximum portion of delay specified by Retry-After to
+// add or subtract as jitter.
+// DefaultDelayFn uses base=25ms, cap=15s, jitter magnitude=0.333
+type CustomizedDelayFnOptions struct {
+	Base            time.Duration
+	Cap             time.Duration
+	JitterMagnitude float64
 }
 
 // DefaultShouldRetryFn is a sane default starting point for a should retry policy.
@@ -67,6 +87,77 @@ func CustomizedShouldRetryFn(options CustomizedShouldRetryFnOptions) func(attemp
 
 		return idempotent && retryableStatusCodes[attempt.Res.StatusCode]
 	}
+}
+
+// DefaultDelayFn is a sane default starting point for a delay policy. It respects
+// the Retry-After response header if present. This header is used by the destination
+// service to communicate when the next attempt is appropriate. It can be either
+// an integer (specifying the number of seconds to wait) or a timestamp from which
+// a duration is calculated. Once a base duration is determined, plus or minus up to
+// 1/3 of that value is added as jitter.
+// If the Retry-After header is not present, the "full jitter" exponential backoff
+// algorithm is used with base=25ms and cap=15s.
+// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After
+// https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+var DefaultDelayFn = CustomizedDelayFn(CustomizedDelayFnOptions{
+	Base:            time.Millisecond * 250,
+	Cap:             time.Second * 10,
+	JitterMagnitude: 0.333,
+})
+
+// CustomizedDelayFn has the same logic as DefaultDelayFn but it allows for specifying
+// the exponential backoff's base and maximum, as well as the fraction to calculate
+// jitter with.
+func CustomizedDelayFn(options CustomizedDelayFnOptions) func(attempt Attempt) time.Duration {
+	return func(attempt Attempt) time.Duration {
+		// check for a retry-after header
+		if attempt.Res != nil && attempt.Res.Header.Get("Retry-After") != "" {
+			retryAfterStr := attempt.Res.Header.Get("Retry-After")
+
+			// try parsing as an integer
+			// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After#delay-seconds
+			i, err := strconv.Atoi(retryAfterStr)
+			if err == nil {
+				return addJitter(time.Duration(i)*time.Second, options.JitterMagnitude)
+			}
+
+			// try parsing as date
+			// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After#http-date
+			t, err := time.Parse(time.RFC1123, retryAfterStr)
+			if err == nil {
+				return addJitter(time.Until(t), options.JitterMagnitude)
+			}
+		}
+
+		// fall back to exponential backoff
+		return expBackoff(attempt.Count, options.Base, options.Cap)
+	}
+}
+
+// Based on "full jitter": https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+func expBackoff(attempt int, base time.Duration, cap time.Duration) time.Duration {
+	exp := math.Pow(2, float64(attempt-1))
+	v := float64(base) * exp
+	return time.Duration(
+		prng.Int63n(int64(math.Min(float64(cap), v))),
+	)
+}
+
+// default jitter is plus or minus 1/3 of the duration
+func addJitter(d time.Duration, magnitude float64) time.Duration {
+	f := float64(d)
+	mj := f * magnitude
+
+	// randomness determines jitter magnitude
+	j := prng.Float64() * mj
+
+	// randomness determines if jitter is added or subtracted
+	coin := prng.Float64()
+	if coin < 0.5 {
+		return time.Duration(f + j)
+	}
+
+	return time.Duration(f - j)
 }
 
 func guessIdempotent(req *http.Request, idempotentMethods map[string]bool) bool {

@@ -88,6 +88,7 @@ func New(options ...func(*Transport)) *Transport {
 func (t *Transport) init() {
 	t.rt = http.DefaultTransport
 	t.shouldRetryFn = DefaultShouldRetryFn
+	t.delayFn = DefaultDelayFn
 
 	tmp := DefaultMaxRetries
 	t.maxRetries = &tmp
