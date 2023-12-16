@@ -309,8 +309,3 @@ func TestTransport_RoundTrip(t *testing.T) {
 
 // TODO test per-attempt timeouts
 // TODO test parent context expiring
-
-// TODO test DefaultShouldRetryFn
-// TODO test CustomizedShouldRetryFn
-// TODO test DefaultDelayFn
-// TODO test CustomizedDelayFn

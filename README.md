@@ -35,6 +35,7 @@ This package is still in development and it is not recommended for use yet.
 - ~~Tweakable versions of the default `ShouldRetryFn` and `DelayFn`~~
 - Unit tests
 - Automated test runs in workflow
+- Documentation
 
 ## License
 

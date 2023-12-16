@@ -123,7 +123,7 @@ func CustomizedDelayFn(options CustomizedDelayFnOptions) func(attempt Attempt) t
 
 			// try parsing as date
 			// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After#http-date
-			t, err := time.Parse(time.RFC1123, retryAfterStr)
+			t, err := time.Parse(http.TimeFormat, retryAfterStr)
 			if err == nil {
 				return addJitter(time.Until(t), options.JitterMagnitude)
 			}

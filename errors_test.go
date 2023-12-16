@@ -1,10 +1,12 @@
-package retryhttp
+package retryhttp_test
 
 import (
 	"context"
 	"errors"
 	"net"
 	"testing"
+
+	"github.com/justinrixx/retryhttp"
 )
 
 type timeoutErr struct{}
@@ -45,7 +47,7 @@ func TestIsDNSErr(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := IsDNSErr(tt.err); got != tt.want {
+			if got := retryhttp.IsDNSErr(tt.err); got != tt.want {
 				t.Errorf("IsDNSErr() = %v, want %v", got, tt.want)
 			}
 		})
@@ -78,7 +80,7 @@ func TestIsTimeoutErr(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := IsTimeoutErr(tt.err); got != tt.want {
+			if got := retryhttp.IsTimeoutErr(tt.err); got != tt.want {
 				t.Errorf("IsTimeoutErr() = %v, want %v", got, tt.want)
 			}
 		})
