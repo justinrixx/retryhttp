@@ -33,7 +33,7 @@ This package is still in development and it is not recommended for use yet.
 - ~~Helper functions for recognizing common HTTP errors~~
 - ~~Good default `ShouldRetryFn` and `DelayFn`~~
 - ~~Tweakable versions of the default `ShouldRetryFn` and `DelayFn`~~
-- Unit tests
+- ~~Unit tests~~
 - Automated test runs in workflow
 - Documentation
 

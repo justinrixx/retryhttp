@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -234,6 +235,38 @@ func TestTransport_RoundTrip(t *testing.T) {
 			wantStatus:       http.StatusOK,
 			expReqBody:       []byte(`this is the request body`),
 		},
+		{
+			name: "should retry the appropriate number of times with default DelayFn",
+			fields: fields{
+				// actually sleeps which makes tests longer
+				tr: retryhttp.New(
+					retryhttp.WithMaxRetries(1),
+				),
+				method: http.MethodGet,
+				responseCodes: func(_ int) int {
+					return http.StatusTooManyRequests
+				},
+			},
+			wantAttemptCount: 2,
+			wantStatus:       http.StatusTooManyRequests,
+		},
+		{
+			name: "should retry the appropriate number of times with delayFn overridden to 0",
+			fields: fields{
+				tr:     retryhttp.New(),
+				method: http.MethodGet,
+				ctxFn: func(ctx context.Context) context.Context {
+					return retryhttp.SetDelayFnOnContext(ctx, func(_ retryhttp.Attempt) time.Duration {
+						return 0
+					})
+				},
+				responseCodes: func(_ int) int {
+					return http.StatusTooManyRequests
+				},
+			},
+			wantAttemptCount: 4,
+			wantStatus:       http.StatusTooManyRequests,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -307,5 +340,101 @@ func TestTransport_RoundTrip(t *testing.T) {
 	}
 }
 
-// TODO test per-attempt timeouts
+func TestPerAttemptTimeout(t *testing.T) {
+	mu := sync.Mutex{}
+	attemptCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		attemptCount++
+		mu.Unlock()
+		time.Sleep(time.Millisecond * 100) // sleep longer than the timeout
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer ts.Close()
+
+	tr := retryhttp.New(
+		retryhttp.WithDelayFn(func(_ retryhttp.Attempt) time.Duration {
+			return 0
+		}),
+		retryhttp.WithAttemptTimeout(time.Millisecond*10), // really short timeout
+	)
+
+	client := http.Client{
+		Transport: tr,
+	}
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
+	if err != nil {
+		t.Fatalf("error creating request: %s", err)
+	}
+
+	_, err = client.Do(req)
+	mu.Lock()
+	if attemptCount != 4 {
+		t.Fatalf("attempt count does not match expected; got %d, want %d", attemptCount, 4)
+	}
+	if err == nil {
+		t.Fatal("expected error from request but got nil")
+	}
+
+	attemptCount = 0
+	mu.Unlock()
+
+	// override per-attempt timeout with context
+	ctx := retryhttp.SetAttemptTimeoutOnContext(context.Background(), 0)
+	res, err := client.Do(req.WithContext(ctx))
+	mu.Lock()
+	if attemptCount != 4 {
+		t.Fatalf("attempt count does not match expected; got %d, want %d", attemptCount, 4)
+	}
+	if err != nil {
+		t.Fatalf("expected nil error but got %s", err)
+	}
+	if res.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("unexpected status code; got %d, want %d", res.StatusCode, http.StatusTooManyRequests)
+	}
+
+	attemptCount = 0
+	mu.Unlock()
+}
+
 // TODO test parent context expiring
+func TestParentContextDeadline(t *testing.T) {
+	mu := sync.Mutex{}
+	attemptCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		attemptCount++
+		mu.Unlock()
+		time.Sleep(time.Millisecond * 100) // sleep longer than the deadline
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer ts.Close()
+
+	tr := retryhttp.New(
+		retryhttp.WithDelayFn(func(_ retryhttp.Attempt) time.Duration {
+			return 0
+		}),
+	)
+
+	client := http.Client{
+		Transport: tr,
+	}
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
+	if err != nil {
+		t.Fatalf("error creating request: %s", err)
+	}
+
+	// really short deadline
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Millisecond*10))
+	defer cancel()
+	_, err = client.Do(req.WithContext(ctx))
+	mu.Lock()
+	if attemptCount != 1 {
+		t.Fatalf("attempt count does not match expected; got %d, want %d", attemptCount, 1)
+	}
+	if err == nil {
+		t.Fatal("expected error from request but got nil")
+	}
+}
