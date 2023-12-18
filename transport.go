@@ -146,7 +146,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		var buf bytes.Buffer
 		if _, err := io.Copy(&buf, req.Body); err != nil {
 			req.Body.Close()
-			return nil, fmt.Errorf("%w: %w", ErrBufferingBody, err)
+			return nil, fmt.Errorf("%w: %s", ErrBufferingBody, err)
 		}
 		req.Body.Close()
 
@@ -193,7 +193,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		delay := delayFn(attempt)
 		if br != nil {
 			if _, serr := br.Seek(0, 0); serr != nil {
-				return injectCancelReader(res, cancel), fmt.Errorf("%w: %w", ErrSeekingBody, err)
+				return injectCancelReader(res, cancel), fmt.Errorf("%w: %s", ErrSeekingBody, err)
 			}
 			reqWithTimeout.Body = io.NopCloser(br)
 		}
