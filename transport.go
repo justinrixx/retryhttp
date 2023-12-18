@@ -12,12 +12,12 @@ import (
 )
 
 // DefaultMaxRetries is the default maximum retries setting. This can be configured using
-// WithMaxRetries.
+// [WithMaxRetries].
 const DefaultMaxRetries = 3
 
 var (
 	// ErrBufferingBody is a sentinel that signals an error before the response was sent. Since
-	// request body streams can only be consumed once, the must be buffered into memory before
+	// request body streams can only be consumed once, they must be buffered into memory before
 	// the first attempt. If an error occurs during that buffering process, it is returned
 	// in a new error wrapping this sentinel. A caller can identify this case using
 	// errors.Is(err, ErrBufferingBody).
@@ -31,7 +31,7 @@ var (
 )
 
 type (
-	// Attempt is a collection of information used by ShouldRetryFn and DelayFn to determine
+	// Attempt is a collection of information used by [ShouldRetryFn] and [DelayFn] to determine
 	// if a retry is appropriate and if so how long to delay.
 	Attempt struct {
 		// Count represents how many attempts have been made. This includes the initial attempt.
@@ -50,16 +50,16 @@ type (
 		Err error
 	}
 
-	// ShouldRetryFn is a callback type consulted by Transport to determine if another attempt
+	// ShouldRetryFn is a callback type consulted by [Transport] to determine if another attempt
 	// should be made after the current one.
 	ShouldRetryFn func(attempt Attempt) bool
 
-	// DelayFn is a callback type consulted by Transport to determine how long to wait before
+	// DelayFn is a callback type consulted by [Transport] to determine how long to wait before
 	// the next attempt.
 	DelayFn func(attempt Attempt) time.Duration
 
-	// Transport implements http.RoundTripper and can be configured with many options. See
-	// the documentation for the New function.
+	// Transport implements [http.RoundTripper] and can be configured with many options. See
+	// the documentation for the [New] function.
 	Transport struct {
 		rt                   http.RoundTripper
 		maxRetries           *int // pointer to differentiate between 0 and unset
@@ -71,9 +71,9 @@ type (
 	}
 )
 
-// New is used to construct a new Transport, configured with any desired options.
-// These options include WithTransport, WithMaxRetries, WithShouldRetryFn,
-// WithDelayFn, and WithPreventRetryWithBody. Any number of options may be provided.
+// New is used to construct a new [Transport], configured with any desired options.
+// These options include [WithTransport], [WithMaxRetries], [WithShouldRetryFn],
+// [WithDelayFn], and [WithPreventRetryWithBody]. Any number of options may be provided.
 // If the same option is provided multiple times, the latest one takes precedence.
 func New(options ...func(*Transport)) *Transport {
 	tr := &Transport{}
@@ -103,9 +103,9 @@ func (t *Transport) init() {
 }
 
 // RoundTrip performs the actual HTTP round trip for a request. It performs setup
-// and retries, but delegates the actual HTTP round trip to Transport's internal
-// roundtripper. This is not intended to be called directly, but rather implement
-// the http.RoundTripper interface so that it can be passed to a http.Client as
+// and retries, but delegates the actual HTTP round trip to [Transport]'s internal
+// roundtripper. This is not intended to be called directly, but rather implements
+// the [http.RoundTripper] interface so that it can be passed to a [http.Client] as
 // its internal Transport.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	t.initOnce.Do(t.init)

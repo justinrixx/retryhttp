@@ -17,11 +17,11 @@ type CustomizedShouldRetryFnOptions struct {
 	RetryableStatusCodes []int
 }
 
-// CustomizedDelayFnOptions are used to tweak the behavior of CustomizedDelayFn.
+// CustomizedDelayFnOptions are used to tweak the behavior of [CustomizedDelayFn].
 // Base and Cap are used in calculating exponential backoff: min(base * (2 ** i), cap)
 // JitterMagnitude determines the maximum portion of delay specified by Retry-After to
 // add or subtract as jitter.
-// DefaultDelayFn uses base=25ms, cap=15s, jitter magnitude=0.333
+// [DefaultDelayFn] uses base=250ms, cap=10s, jitter magnitude=0.333
 type CustomizedDelayFnOptions struct {
 	Base            time.Duration
 	Cap             time.Duration
@@ -34,10 +34,11 @@ type CustomizedDelayFnOptions struct {
 // Idempotency should also be taken into account when retrying: retrying a non-idempotent
 // request can result in creating duplicate resources for example.
 // DefaultShouldRetryFn's behavior is that:
-// - DNS errors never reached the target server, and are therefore safe to retry
-// - If a timeout error occurred and the request is guessed to be idempotent, it is retried
-// - If a 429 status is returned or the Retry-After response header is included it is retried
-// - If the status code is retryable and the request is guessed to be idempotent it is retried
+//   - DNS errors never reached the target server, and are therefore safe to retry.
+//   - If a timeout error occurred and the request is guessed to be idempotent, it is retried.
+//   - If a 429 status is returned or the Retry-After response header is included it is retried.
+//   - If the status code is retryable and the request is guessed to be idempotent it is retried.
+//
 // Default retryablestatus codes are http.StatusBadGateway and http.StatusServiceUnavailable.
 // Idempotency is guessed based on the inclusion of the Idempotency-Key or X-Idempotency-Key
 // header, or an idempotent method (as defined in RFC 9110).
@@ -54,7 +55,7 @@ var DefaultShouldRetryFn = CustomizedShouldRetryFn(CustomizedShouldRetryFnOption
 	RetryableStatusCodes: []int{http.StatusBadGateway, http.StatusServiceUnavailable},
 })
 
-// CustomizedShouldRetryFn has the same logic as DefaultShouldRetryFn but it allows for
+// CustomizedShouldRetryFn has the same logic as [DefaultShouldRetryFn] but it allows for
 // specifying which status codes should be assumed retryable and which methods should be
 // guessed idempotent. This is useful if the default behavior is desired, with small tweaks.
 func CustomizedShouldRetryFn(options CustomizedShouldRetryFnOptions) func(attempt Attempt) bool {
@@ -90,22 +91,23 @@ func CustomizedShouldRetryFn(options CustomizedShouldRetryFnOptions) func(attemp
 }
 
 // DefaultDelayFn is a sane default starting point for a delay policy. It respects
-// the Retry-After response header if present. This header is used by the destination
+// the [Retry-After] response header if present. This header is used by the destination
 // service to communicate when the next attempt is appropriate. It can be either
 // an integer (specifying the number of seconds to wait) or a timestamp from which
 // a duration is calculated. Once a base duration is determined, plus or minus up to
 // 1/3 of that value is added as jitter.
-// If the Retry-After header is not present, the "full jitter" exponential backoff
-// algorithm is used with base=25ms and cap=15s.
-// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After
-// https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+// If the Retry-After header is not present, the "[full jitter]" exponential backoff
+// algorithm is used with base=250ms and cap=10s.
+//
+// [Retry-After]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After
+// [full jitter]: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
 var DefaultDelayFn = CustomizedDelayFn(CustomizedDelayFnOptions{
 	Base:            time.Millisecond * 250,
 	Cap:             time.Second * 10,
 	JitterMagnitude: 0.333,
 })
 
-// CustomizedDelayFn has the same logic as DefaultDelayFn but it allows for specifying
+// CustomizedDelayFn has the same logic as [DefaultDelayFn] but it allows for specifying
 // the exponential backoff's base and maximum, as well as the fraction to calculate
 // jitter with.
 func CustomizedDelayFn(options CustomizedDelayFnOptions) func(attempt Attempt) time.Duration {
@@ -134,7 +136,7 @@ func CustomizedDelayFn(options CustomizedDelayFnOptions) func(attempt Attempt) t
 	}
 }
 
-// Based on "full jitter": https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+// based on "full jitter": https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
 func expBackoff(attempt int, base time.Duration, cap time.Duration) time.Duration {
 	exp := math.Pow(2, float64(attempt-1))
 	v := float64(base) * exp

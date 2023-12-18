@@ -23,7 +23,7 @@ const (
 )
 
 // WithTransport configures a Transport with an internal roundtripper of its own.
-// This is often http.DefaultTransport, but it could be anything else.
+// This is often [http.DefaultTransport], but it could be anything else.
 func WithTransport(transport http.RoundTripper) func(*Transport) {
 	return func(t *Transport) {
 		t.rt = transport
@@ -31,7 +31,7 @@ func WithTransport(transport http.RoundTripper) func(*Transport) {
 }
 
 // WithMaxRetries configures the maximum number of retries a Transport is allowed to make.
-// If not set, defaults to DefaultMaxRetries. Note that this number does not include the
+// If not set, defaults to [DefaultMaxRetries]. Note that this number does not include the
 // initial attempt, so if this is configured as 3, there could be up to 4 total attempts.
 func WithMaxRetries(maxRetries int) func(*Transport) {
 	return func(t *Transport) {
@@ -39,14 +39,14 @@ func WithMaxRetries(maxRetries int) func(*Transport) {
 	}
 }
 
-// WithShouldRetryFn configures the ShouldRetryFn callback to use.
+// WithShouldRetryFn configures the [ShouldRetryFn] callback to use.
 func WithShouldRetryFn(shouldRetryFn ShouldRetryFn) func(*Transport) {
 	return func(t *Transport) {
 		t.shouldRetryFn = shouldRetryFn
 	}
 }
 
-// WithDelayFn configures the DelayFn callback to use.
+// WithDelayFn configures the [DelayFn] callback to use.
 func WithDelayFn(delayFn DelayFn) func(*Transport) {
 	return func(t *Transport) {
 		t.delayFn = delayFn
@@ -75,37 +75,37 @@ func WithAttemptTimeout(attemptTimeout time.Duration) func(*Transport) {
 	}
 }
 
-// SetMaxRetriesOnContext can be used to override the settings on a retryhttp.Transport.
+// SetMaxRetriesOnContext can be used to override the settings on a Transport.
 // Any request made with the returned context will have its MaxRetries setting
 // overridden with the provided value.
 func SetMaxRetriesOnContext(ctx context.Context, maxRetries int) context.Context {
 	return context.WithValue(ctx, maxRetriesContextKey, maxRetries)
 }
 
-// SetShouldRetryFnOnContext can be used to override the settings on a retryhttp.Transport.
-// Any request made with the returned context will have its ShouldRetryFn overridden with
+// SetShouldRetryFnOnContext can be used to override the settings on a Transport.
+// Any request made with the returned context will have its [ShouldRetryFn] overridden with
 // the provided value.
 func SetShouldRetryFnOnContext(ctx context.Context, shouldRetryFn ShouldRetryFn) context.Context {
 	return context.WithValue(ctx, shouldRetryFnContextKey, shouldRetryFn)
 }
 
-// SetDelayFnOnContext can be used to override the settings on a retryhttp.Transport.
-// Any request made with the returned context will have its DelayFn overridden with
+// SetDelayFnOnContext can be used to override the settings on a Transport.
+// Any request made with the returned context will have its [DelayFn] overridden with
 // the provided value.
 func SetDelayFnOnContext(ctx context.Context, delayFn DelayFn) context.Context {
 	return context.WithValue(ctx, delayFnContextKey, delayFn)
 }
 
 // SetPreventRetryWithBodyOnContext can be used to override the settings on a
-// retryhttp.Transport. Any request made with the returned context will have its
+// Transport. Any request made with the returned context will have its
 // PreventRetryWithbody setting overridden with the provided value.
 func SetPreventRetryWithBodyOnContext(ctx context.Context, preventRetryWithBody bool) context.Context {
 	return context.WithValue(ctx, preventRetryWithBodyContextKey, preventRetryWithBody)
 }
 
-// SetAttemptTimeoutOnContext can be used to override the settings on a
-// retryhttp.Transport. Any request made with the returned context will have its
-// AttemptTimeout setting overridden with the provided value.
+// SetAttemptTimeoutOnContext can be used to override the settings on a// Transport.
+// Any request made with the returned context will have its AttemptTimeout setting
+// overridden with the provided value.
 func SetAttemptTimeoutOnContext(ctx context.Context, attemptTimeout time.Duration) context.Context {
 	return context.WithValue(ctx, attemptTimeoutContextKey, attemptTimeout)
 }
