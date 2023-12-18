@@ -3,9 +3,9 @@
 `retryhttp` allows you to add HTTP retries to your service or application with no refactoring at all, just a few lines of configuration where your client is instantiated. This package's goals are:
 
 - Make adding retries easy, with no refactor required (as stated above)
-- Provide a good starting point for retry behavior
-- Make customizing retry behavior easy
-- Allow for one-off behavior changes without needing multiple HTTP clients
+- [Provide a good starting point for retry behavior](./docs/default.md)
+- [Make customizing retry behavior easy](./docs/options.md)
+- [Allow for one-off behavior changes without needing multiple HTTP clients](./docs/options.md#example)
 - 100% Go, with no external dependencies (have a peek at `go.mod`)
 
 ## How it works
@@ -26,6 +26,13 @@ client := http.Client{
 client := http.Client{
     Transport: retryhttp.New(
         // optional retry configurations
+        retryhttp.WithShouldRetryFn(func(attempt retryhttp.Attempt) bool {
+            return attempt.Res != nil && attempt.Res.StatusCode == http.StatusServiceUnavailable
+        }),
+        retryhttp.WithDelayFn(func(attempt retryhttp.Attempt) time.Duration {
+            return expBackoff(attempt.Count)
+        }),
+        retryhttp.WithMaxRetries(2),
     ),
     // other HTTP client options
 }
