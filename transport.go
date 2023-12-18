@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -18,13 +19,13 @@ var (
 	// ErrBufferingBody is a sentinel that signals an error before the response was sent. Since
 	// request body streams can only be consumed once, the must be buffered into memory before
 	// the first attempt. If an error occurs during that buffering process, it is returned
-	// in an errors.Join with this sentinel. A caller can identify this case using
+	// in a new error wrapping this sentinel. A caller can identify this case using
 	// errors.Is(err, ErrBufferingBody).
 	ErrBufferingBody = errors.New("error buffering body before first attempt")
 
 	// ErrSeekingBody is a sentinel that signals an error preparing for a new attempt by
 	// rewinding the stream back to the beginning. If an error occurs during that seek, it is
-	// returned in an errors.Join with this sentinel. A caller can identify this case using
+	// returned in a new error wrapping this sentinel. A caller can identify this case using
 	// errors.Is(err, ErrSeekingBody).
 	ErrSeekingBody = errors.New("error seeking body buffer back to beginning after attempt")
 )
@@ -145,7 +146,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		var buf bytes.Buffer
 		if _, err := io.Copy(&buf, req.Body); err != nil {
 			req.Body.Close()
-			return nil, errors.Join(err, ErrBufferingBody)
+			return nil, fmt.Errorf("%w: %w", ErrBufferingBody, err)
 		}
 		req.Body.Close()
 
@@ -192,7 +193,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		delay := delayFn(attempt)
 		if br != nil {
 			if _, serr := br.Seek(0, 0); serr != nil {
-				return injectCancelReader(res, cancel), errors.Join(err, ErrSeekingBody)
+				return injectCancelReader(res, cancel), fmt.Errorf("%w: %w", ErrSeekingBody, err)
 			}
 			reqWithTimeout.Body = io.NopCloser(br)
 		}
