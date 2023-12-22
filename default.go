@@ -39,7 +39,7 @@ type CustomizedDelayFnOptions struct {
 //   - If a 429 status is returned or the Retry-After response header is included it is retried.
 //   - If the status code is retryable and the request is guessed to be idempotent it is retried.
 //
-// Default retryablestatus codes are http.StatusBadGateway and http.StatusServiceUnavailable.
+// Default retryablestatus codes are [http.StatusBadGateway] and [http.StatusServiceUnavailable].
 // Idempotency is guessed based on the inclusion of the Idempotency-Key or X-Idempotency-Key
 // header, or an idempotent method (as defined in RFC 9110).
 var DefaultShouldRetryFn = CustomizedShouldRetryFn(CustomizedShouldRetryFnOptions{
