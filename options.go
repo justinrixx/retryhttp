@@ -75,38 +75,38 @@ func WithAttemptTimeout(attemptTimeout time.Duration) func(*Transport) {
 	}
 }
 
-// SetMaxRetriesOnContext can be used to override the settings on a Transport.
+// SetMaxRetries can be used to override the settings on a Transport.
 // Any request made with the returned context will have its MaxRetries setting
 // overridden with the provided value.
-func SetMaxRetriesOnContext(ctx context.Context, maxRetries int) context.Context {
+func SetMaxRetries(ctx context.Context, maxRetries int) context.Context {
 	return context.WithValue(ctx, maxRetriesContextKey, maxRetries)
 }
 
-// SetShouldRetryFnOnContext can be used to override the settings on a Transport.
+// SetShouldRetryFn can be used to override the settings on a Transport.
 // Any request made with the returned context will have its [ShouldRetryFn] overridden with
 // the provided value.
-func SetShouldRetryFnOnContext(ctx context.Context, shouldRetryFn ShouldRetryFn) context.Context {
+func SetShouldRetryFn(ctx context.Context, shouldRetryFn ShouldRetryFn) context.Context {
 	return context.WithValue(ctx, shouldRetryFnContextKey, shouldRetryFn)
 }
 
-// SetDelayFnOnContext can be used to override the settings on a Transport.
+// SetDelayFn can be used to override the settings on a Transport.
 // Any request made with the returned context will have its [DelayFn] overridden with
 // the provided value.
-func SetDelayFnOnContext(ctx context.Context, delayFn DelayFn) context.Context {
+func SetDelayFn(ctx context.Context, delayFn DelayFn) context.Context {
 	return context.WithValue(ctx, delayFnContextKey, delayFn)
 }
 
-// SetPreventRetryWithBodyOnContext can be used to override the settings on a
+// SetPreventRetryWithBody can be used to override the settings on a
 // Transport. Any request made with the returned context will have its
 // PreventRetryWithbody setting overridden with the provided value.
-func SetPreventRetryWithBodyOnContext(ctx context.Context, preventRetryWithBody bool) context.Context {
+func SetPreventRetryWithBody(ctx context.Context, preventRetryWithBody bool) context.Context {
 	return context.WithValue(ctx, preventRetryWithBodyContextKey, preventRetryWithBody)
 }
 
-// SetAttemptTimeoutOnContext can be used to override the settings on a// Transport.
+// SetAttemptTimeout can be used to override the settings on a// Transport.
 // Any request made with the returned context will have its AttemptTimeout setting
 // overridden with the provided value.
-func SetAttemptTimeoutOnContext(ctx context.Context, attemptTimeout time.Duration) context.Context {
+func SetAttemptTimeout(ctx context.Context, attemptTimeout time.Duration) context.Context {
 	return context.WithValue(ctx, attemptTimeoutContextKey, attemptTimeout)
 }
 

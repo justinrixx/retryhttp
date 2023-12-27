@@ -5,11 +5,11 @@
 | Option | Context Equivalent | Default Value | Description |
 | ------ | ------------------ | ------------- | ----------- |
 | `WithTransport` | none | `http.DefaultTransport` | The internal `http.RoundTripper` to use for requests. |
-| `WithShouldRetryFn` | `SetShouldRetryFnOnContext` | `DefaultShouldRetryFn` | The `ShouldRetryFn` that determines if a request should be retried. `DefaultShouldRetryFn` is a good starting point. If you're only looking to make minor tweaks,  `CustomizedShouldRetryFn` may be appropriate. |
-| `WithDelayFn` | `SetDelayFnOnContext` | `DefaultDelayFn` | The `DelayFn` that determines how long to delay between retries. If `DefaultDelayFn` doesn't solve your use-case, `CustomizedDelayFn` may be appropriate. |
-| `WithMaxRetries` | `SetMaxRetriesOnContext` | 3 | The maximum number of retries to make. Note that this is the number of _retries_ not _attempts_, so a `MaxRetries` of 3 means up to 4 total attempts: 1 initial attempt and 3 retries. Note also that if your `ShouldRetryFn` returns `false`, a retry will not be made even if `MaxRetries` has not been exhausted. |
-| `WithPreventRetryWithBody` | `SetPreventRetryWithBodyOnContext` | `false` | Whether to prevent retrying requests that have a HTTP body. Any request that has any chance of needing a retry must buffer its body into memory so that it can be replayed in subsequent attempts. This may or may not be appropriate for certain use-cases, which is why this option is provided. |
-| `WithAttemptTimeout` | `SetAttemptTimeoutOnContext` | No timeout | A per-attempt timeout to be used. This differs from an overall timeout in that the timeout is reset for each attempt. Without a per-attempt timeout, the overall timeout could be exhausted in a single attempt with no time left for subsequent retries. Providing `time.Duration(0)` here removes the timeout. |
+| `WithShouldRetryFn` | `SetShouldRetryFn` | `DefaultShouldRetryFn` | The `ShouldRetryFn` that determines if a request should be retried. `DefaultShouldRetryFn` is a good starting point. If you're only looking to make minor tweaks,  `CustomizedShouldRetryFn` may be appropriate. |
+| `WithDelayFn` | `SetDelayFn` | `DefaultDelayFn` | The `DelayFn` that determines how long to delay between retries. If `DefaultDelayFn` doesn't solve your use-case, `CustomizedDelayFn` may be appropriate. |
+| `WithMaxRetries` | `SetMaxRetries` | 3 | The maximum number of retries to make. Note that this is the number of _retries_ not _attempts_, so a `MaxRetries` of 3 means up to 4 total attempts: 1 initial attempt and 3 retries. Note also that if your `ShouldRetryFn` returns `false`, a retry will not be made even if `MaxRetries` has not been exhausted. |
+| `WithPreventRetryWithBody` | `SetPreventRetryWithBody` | `false` | Whether to prevent retrying requests that have a HTTP body. Any request that has any chance of needing a retry must buffer its body into memory so that it can be replayed in subsequent attempts. This may or may not be appropriate for certain use-cases, which is why this option is provided. |
+| `WithAttemptTimeout` | `SetAttemptTimeout` | No timeout | A per-attempt timeout to be used. This differs from an overall timeout in that the timeout is reset for each attempt. Without a per-attempt timeout, the overall timeout could be exhausted in a single attempt with no time left for subsequent retries. Providing `time.Duration(0)` here removes the timeout. |
 
 ## Example
 
@@ -29,15 +29,15 @@ client := http.Client{
 }
 
 ctx := context.TODO
-ctx = retryhttp.SetShouldRetryFnOnContext(ctx, func(attempt retryhttp.Attempt) bool {
+ctx = retryhttp.SetShouldRetryFn(ctx, func(attempt retryhttp.Attempt) bool {
     // retry any error
     if attempt.Err != nil {
         return true
     }
     return false
 })
-ctx = retryhttp.SetMaxRetriesOnContext(ctx, 1) // only 1 retry
-ctx = retryhttp.SetAttemptTimeoutOnContext(ctx, 0) // remove attempt timeout
+ctx = retryhttp.SetMaxRetries(ctx, 1) // only 1 retry
+ctx = retryhttp.SetAttemptTimeout(ctx, 0) // remove attempt timeout
 
 req, err := http.NewRequest(http.MethodGet, "example.com", nil)
 ...

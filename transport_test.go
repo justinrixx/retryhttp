@@ -177,7 +177,7 @@ func TestTransport_RoundTrip(t *testing.T) {
 				),
 				method: http.MethodGet,
 				ctxFn: func(ctx context.Context) context.Context { // context overrides retry count
-					return retryhttp.SetMaxRetriesOnContext(ctx, 3)
+					return retryhttp.SetMaxRetries(ctx, 3)
 				},
 				responseCodes: func(_ int) int {
 					return http.StatusTooManyRequests
@@ -199,7 +199,7 @@ func TestTransport_RoundTrip(t *testing.T) {
 				),
 				method: http.MethodGet,
 				ctxFn: func(ctx context.Context) context.Context {
-					return retryhttp.SetShouldRetryFnOnContext(ctx, func(_ retryhttp.Attempt) bool {
+					return retryhttp.SetShouldRetryFn(ctx, func(_ retryhttp.Attempt) bool {
 						return false
 					})
 				},
@@ -222,7 +222,7 @@ func TestTransport_RoundTrip(t *testing.T) {
 				method: http.MethodPost,
 				body:   bytes.NewReader([]byte(`this is the request body`)),
 				ctxFn: func(ctx context.Context) context.Context {
-					return retryhttp.SetPreventRetryWithBodyOnContext(ctx, false)
+					return retryhttp.SetPreventRetryWithBody(ctx, false)
 				},
 				responseCodes: func(i int) int {
 					if i == 0 {
@@ -256,7 +256,7 @@ func TestTransport_RoundTrip(t *testing.T) {
 				tr:     retryhttp.New(),
 				method: http.MethodGet,
 				ctxFn: func(ctx context.Context) context.Context {
-					return retryhttp.SetDelayFnOnContext(ctx, func(_ retryhttp.Attempt) time.Duration {
+					return retryhttp.SetDelayFn(ctx, func(_ retryhttp.Attempt) time.Duration {
 						return 0
 					})
 				},
@@ -381,7 +381,7 @@ func TestPerAttemptTimeout(t *testing.T) {
 	mu.Unlock()
 
 	// override per-attempt timeout with context
-	ctx := retryhttp.SetAttemptTimeoutOnContext(context.Background(), 0)
+	ctx := retryhttp.SetAttemptTimeout(context.Background(), 0)
 	res, err := client.Do(req.WithContext(ctx))
 	mu.Lock()
 	if attemptCount != 4 {
