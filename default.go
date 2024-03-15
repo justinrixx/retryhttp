@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// prng generates random numbers for calculating jitter
-var prng = rand.New(rand.NewSource(time.Now().UnixNano()))
-
 // CustomizedShouldRetryFnOptions are used to tweak the behavior of CustomizedShouldRetryFn.
 type CustomizedShouldRetryFnOptions struct {
 	IdempotentMethods    []string
@@ -98,6 +95,9 @@ func CustomizedShouldRetryFn(options CustomizedShouldRetryFnOptions) func(attemp
 // 1/3 of that value is added as jitter.
 // If the Retry-After header is not present, the "[full jitter]" exponential backoff
 // algorithm is used with base=250ms and cap=10s.
+// Note that the top level functions of math/rand are used to produce random values.
+// If determinism is desired, or if determinism is acceptable and when running on
+// a version prior to go 1.20, package consumers may wish to call [rand.Seed].
 //
 // [Retry-After]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After
 // [full jitter]: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
@@ -141,7 +141,7 @@ func expBackoff(attempt int, base time.Duration, cap time.Duration) time.Duratio
 	exp := math.Pow(2, float64(attempt-1))
 	v := float64(base) * exp
 	return time.Duration(
-		prng.Int63n(int64(math.Min(float64(cap), v))),
+		rand.Int63n(int64(math.Min(float64(cap), v))),
 	)
 }
 
@@ -151,10 +151,10 @@ func addJitter(d time.Duration, magnitude float64) time.Duration {
 	mj := f * magnitude
 
 	// randomness determines jitter magnitude
-	j := prng.Float64() * mj
+	j := rand.Float64() * mj
 
 	// randomness determines if jitter is added or subtracted
-	coin := prng.Float64()
+	coin := rand.Float64()
 	if coin < 0.5 {
 		return time.Duration(f + j)
 	}
