@@ -28,6 +28,11 @@ var (
 	// returned in a new error wrapping this sentinel. A caller can identify this case using
 	// errors.Is(err, ErrSeekingBody).
 	ErrSeekingBody = errors.New("error seeking body buffer back to beginning after attempt")
+
+	// ErrThrottled signals that a request was throttled. It may be returned even when the http
+	// response is non-nil, so the presence of a throttle error does not mean the response is nil
+	// or empty.
+	ErrThrottled = errors.New("retry throttled")
 )
 
 type (
@@ -65,6 +70,7 @@ type (
 		maxRetries           *int // pointer to differentiate between 0 and unset
 		shouldRetryFn        ShouldRetryFn
 		delayFn              DelayFn
+		throttler            Throttler
 		preventRetryWithBody bool
 		attemptTimeout       time.Duration
 		initOnce             sync.Once
@@ -109,6 +115,14 @@ func (t *Transport) init() {
 // its internal Transport.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	t.initOnce.Do(t.init)
+
+	// check if the initial request should be made at all
+	if t.throttler != nil && t.throttler.ShouldThrottle(Attempt{
+		Count: 0,
+		Req:   req,
+	}) {
+		return nil, ErrThrottled
+	}
 
 	var attemptCount int
 	ctx := req.Context()
@@ -174,10 +188,6 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		res, err := t.rt.RoundTrip(reqWithTimeout)
 		attemptCount++
 
-		if preventRetry || attemptCount-1 >= maxRetries {
-			return injectCancelReader(res, cancel), err
-		}
-
 		attempt := Attempt{
 			Count: attemptCount,
 			Req:   req,
@@ -185,9 +195,25 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 			Err:   err,
 		}
 
+		if t.throttler != nil {
+			t.throttler.RecordStats(attempt)
+		}
+
+		if preventRetry || attemptCount-1 >= maxRetries {
+			return injectCancelReader(res, cancel), err
+		}
+
 		shouldRetry := shouldRetryFn(attempt)
 		if !shouldRetry {
 			return injectCancelReader(res, cancel), err
+		}
+
+		if t.throttler != nil && t.throttler.ShouldThrottle(attempt) {
+			e := ErrThrottled
+			if err != nil {
+				e = errors.Join(err, ErrThrottled)
+			}
+			return injectCancelReader(res, cancel), e
 		}
 
 		delay := delayFn(attempt)

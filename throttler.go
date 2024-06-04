@@ -14,13 +14,14 @@ const (
 	defaultBuckets         = defaultTimespanSeconds / 10 // 10s per bucket
 )
 
-var ErrThrottled = errors.New("retry throttled")
-
-// Throttler is an interface decides if a retry should be throttled
-type Throttler interface {
-	ShouldThrottle(res *http.Response, err error) bool
-	Stop()
-}
+type (
+	// Throttler is an interface decides if a retry should be throttled
+	Throttler interface {
+		ShouldThrottle(attempt Attempt) bool
+		RecordStats(attempt Attempt)
+		Stop()
+	}
+)
 
 type defaultThrottler struct {
 	totalReqs      *atomicCounter
@@ -59,13 +60,11 @@ func NewDefaultThrottler(k float64, retryBudget float64) defaultThrottler {
 }
 
 // ShouldThrottle decides whether a request should be throttled.
-func (t defaultThrottler) ShouldThrottle(res *http.Response, err error, isRetry bool) bool {
-	t.recordStats(res, err, isRetry)
-
+func (t *defaultThrottler) ShouldThrottle(attempt Attempt) bool {
 	total := t.totalReqs.read()
 	fTotal := float64(total)
 
-	if isRetry {
+	if isAttemptRetry(attempt) {
 		// check per-client retry budget
 		retried := t.retriedReqs.read()
 		if float64(retried)/fTotal > t.retryBudget {
@@ -81,22 +80,24 @@ func (t defaultThrottler) ShouldThrottle(res *http.Response, err error, isRetry 
 	return p > rand.Float64()
 }
 
-// recordStats records information about a request which the throttler can use later
+// RecordStats records information about a request which the throttler can use later
 // to make throttling decisions. This throttler records 429s and context deadline
-// exceeded errors as signal of overload.
-func (t defaultThrottler) recordStats(res *http.Response, err error, isRetry bool) {
+// exceeded errors as signals of overload.
+func (t *defaultThrottler) RecordStats(attempt Attempt) {
 	t.totalReqs.increment()
-	if isRetry {
+	if isAttemptRetry(attempt) {
 		t.retriedReqs.increment()
 	}
 
-	if (err != nil && errors.Is(err, context.DeadlineExceeded)) ||
-		(res != nil && res.StatusCode == http.StatusTooManyRequests) {
+	if (attempt.Err != nil && errors.Is(attempt.Err, context.DeadlineExceeded)) ||
+		(attempt.Res != nil && attempt.Res.StatusCode == http.StatusTooManyRequests) {
 		t.overloadedReqs.increment()
 	}
 }
 
-func (t defaultThrottler) Stop() {
+// Stop performs necessary cleanup of the throttler. Neglecting to call this will result
+// in leaked memory and CPU resources.
+func (t *defaultThrottler) Stop() {
 	go func() {
 		t.totalStop <- true
 	}()
@@ -106,4 +107,8 @@ func (t defaultThrottler) Stop() {
 	go func() {
 		t.retriedStop <- true
 	}()
+}
+
+func isAttemptRetry(attempt Attempt) bool {
+	return attempt.Count > 1
 }
