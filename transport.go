@@ -95,11 +95,17 @@ func (t *Transport) init() {
 	if t.rt == nil {
 		t.rt = http.DefaultTransport
 	}
+
 	if t.shouldRetryFn == nil {
 		t.shouldRetryFn = DefaultShouldRetryFn
 	}
+
 	if t.delayFn == nil {
 		t.delayFn = DefaultDelayFn
+	}
+
+	if t.throttler == nil {
+		t.throttler = &noopThrottler{}
 	}
 
 	if t.maxRetries == nil {
@@ -117,7 +123,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	t.initOnce.Do(t.init)
 
 	// check if the initial request should be made at all
-	if t.throttler != nil && t.throttler.ShouldThrottle(Attempt{
+	if t.throttler.ShouldThrottle(Attempt{
 		Count: 0,
 		Req:   req,
 	}) {
@@ -195,9 +201,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 			Err:   err,
 		}
 
-		if t.throttler != nil {
-			t.throttler.RecordStats(attempt)
-		}
+		t.throttler.RecordStats(attempt)
 
 		if preventRetry || attemptCount-1 >= maxRetries {
 			return injectCancelReader(res, cancel), err
@@ -208,7 +212,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 			return injectCancelReader(res, cancel), err
 		}
 
-		if t.throttler != nil && t.throttler.ShouldThrottle(attempt) {
+		if t.throttler.ShouldThrottle(attempt) {
 			e := ErrThrottled
 			if err != nil {
 				e = errors.Join(err, ErrThrottled)
