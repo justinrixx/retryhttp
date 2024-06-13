@@ -75,6 +75,18 @@ func WithAttemptTimeout(attemptTimeout time.Duration) func(*Transport) {
 	}
 }
 
+// WithThrottler configures a throttler to be used for requests. No throttler
+// is used by default. Note that using the provided [DefaultThrottler] requires
+// additional memory and CPU to keep track of state for throttling decisions.
+// Also note that if using any throttler, provided by this package or custom,
+// [ErrThrottled] is used to signal that a request was throttled. This can result
+// in a non-nil error ([ErrThrottled]) with a non-nil http response.
+func WithThrottler(throttler Throttler) func(*Transport) {
+	return func(t *Transport) {
+		t.throttler = throttler
+	}
+}
+
 // SetMaxRetries can be used to override the settings on a Transport.
 // Any request made with the returned context will have its MaxRetries setting
 // overridden with the provided value.
