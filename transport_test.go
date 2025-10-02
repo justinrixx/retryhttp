@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"errors"
 
 	"github.com/justinrixx/retryhttp"
 )
@@ -338,6 +339,122 @@ func TestTransport_RoundTrip(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWrapError(t *testing.T) {
+    // Create a server that closes connections to trigger errors
+    ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Close connection immediately to trigger EOF
+        hj, ok := w.(http.Hijacker)
+        if !ok {
+            t.Fatal("server doesn't support hijacking")
+        }
+        conn, _, err := hj.Hijack()
+        if err != nil {
+            t.Fatal(err)
+        }
+        conn.Close()
+    }))
+    defer ts.Close()
+
+    t.Run("with wrap error enabled", func(t *testing.T) {
+        tr := retryhttp.New(
+            retryhttp.WithMaxRetries(2),
+            retryhttp.WithWrapError(true),
+            retryhttp.WithDelayFn(func(_ retryhttp.Attempt) time.Duration {
+                return 0
+            }),
+            retryhttp.WithShouldRetryFn(func(attempt retryhttp.Attempt) bool {
+                return attempt.Err != nil // Ensures EOF errors are retried
+            }),
+        )
+
+        client := http.Client{
+            Transport: tr,
+        }
+
+        req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
+        if err != nil {
+            t.Fatalf("error creating request: %s", err)
+        }
+
+        _, err = client.Do(req)
+        if err == nil {
+            t.Fatal("expected error but got nil")
+        }
+
+        // Check that the error is wrapped with ErrRetriesExhausted
+        if !errors.Is(err, retryhttp.ErrRetriesExhausted) {
+            t.Errorf("expected error to be wrapped with ErrRetriesExhausted, got: %v", err)
+        }
+    })
+    
+    t.Run("with wrap error disabled", func(t *testing.T) {
+        tr := retryhttp.New(
+            retryhttp.WithMaxRetries(2),
+            retryhttp.WithWrapError(false),
+            retryhttp.WithDelayFn(func(_ retryhttp.Attempt) time.Duration {
+                return 0
+            }),
+            retryhttp.WithShouldRetryFn(func(attempt retryhttp.Attempt) bool {
+                return attempt.Err != nil // Retry all errors
+            }),
+        )
+
+        client := http.Client{
+            Transport: tr,
+        }
+
+        req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
+        if err != nil {
+            t.Fatalf("error creating request: %s", err)
+        }
+
+        _, err = client.Do(req)
+        if err == nil {
+            t.Fatal("expected error but got nil")
+        }
+
+        // Check that the error is NOT wrapped with ErrRetriesExhausted
+        if errors.Is(err, retryhttp.ErrRetriesExhausted) {
+            t.Errorf("expected error to not be wrapped with ErrRetriesExhausted, got: %v", err)
+        }
+    })
+
+	t.Run("context override to enable wrap error", func(t *testing.T) {
+        tr := retryhttp.New(
+            retryhttp.WithMaxRetries(2),
+            retryhttp.WithWrapError(false), // Transport says don't wrap
+            retryhttp.WithDelayFn(func(_ retryhttp.Attempt) time.Duration {
+                return 0
+            }),
+            retryhttp.WithShouldRetryFn(func(attempt retryhttp.Attempt) bool {
+                return attempt.Err != nil
+            }),
+        )
+
+        client := http.Client{
+            Transport: tr,
+        }
+
+        req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
+        if err != nil {
+            t.Fatalf("error creating request: %s", err)
+        }
+
+        // Context overrides to enable wrapping
+        ctx := retryhttp.SetWrapError(context.Background(), true)
+        
+        _, err = client.Do(req.WithContext(ctx))
+        if err == nil {
+            t.Fatal("expected error but got nil")
+        }
+
+        // Check that the error IS wrapped because context overrode it
+        if !errors.Is(err, retryhttp.ErrRetriesExhausted) {
+            t.Errorf("expected error to be wrapped with ErrRetriesExhausted due to context override, got: %v", err)
+        }
+    })
 }
 
 func TestPerAttemptTimeout(t *testing.T) {
