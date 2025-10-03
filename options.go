@@ -12,7 +12,6 @@ type (
 	delayFnContextKeyType              string
 	preventRetryWithBodyContextKeyType string
 	attemptTimeoutContextKeyType       string
-	wrapErrorContextKeyType            string
 )
 
 const (
@@ -21,7 +20,6 @@ const (
 	delayFnContextKey              = delayFnContextKeyType("delayFn")
 	preventRetryWithBodyContextKey = preventRetryWithBodyContextKeyType("preventRetryWithBody")
 	attemptTimeoutContextKey       = attemptTimeoutContextKeyType("attemptTimeout")
-	wrapErrorContextKey            = wrapErrorContextKeyType("wrapError")
 )
 
 // WithTransport configures a Transport with an internal roundtripper of its own.
@@ -77,16 +75,6 @@ func WithAttemptTimeout(attemptTimeout time.Duration) func(*Transport) {
 	}
 }
 
-// WithWrapError configures whether to wrap errors with additional context when retries
-// are exhausted. When enabled, the final error will be wrapped with [ErrRetriesExhausted]
-// to make it clear that the failure was due to retry exhaustion rather than a single
-// request failure. This can be helpful for debugging and monitoring.
-func WithWrapError(wrapError bool) func(*Transport) {
-	return func(t *Transport) {
-		t.wrapError = wrapError
-	}
-}
-
 // SetMaxRetries can be used to override the settings on a Transport.
 // Any request made with the returned context will have its MaxRetries setting
 // overridden with the provided value.
@@ -122,13 +110,6 @@ func SetAttemptTimeout(ctx context.Context, attemptTimeout time.Duration) contex
 	return context.WithValue(ctx, attemptTimeoutContextKey, attemptTimeout)
 }
 
-// SetWrapError can be used to override the settings on a Transport.
-// Any request made with the returned context will have its WrapError setting
-// overridden with the provided value.
-func SetWrapError(ctx context.Context, wrapError bool) context.Context {
-    return context.WithValue(ctx, wrapErrorContextKey, wrapError)
-}
-
 func getMaxRetriesFromContext(ctx context.Context) (int, bool) {
 	val, ok := ctx.Value(maxRetriesContextKey).(int)
 	return val, ok
@@ -152,9 +133,4 @@ func getPreventRetryWithBodyFromContext(ctx context.Context) (bool, bool) {
 func getAttemptTimeoutFromContext(ctx context.Context) (time.Duration, bool) {
 	val, ok := ctx.Value(attemptTimeoutContextKey).(time.Duration)
 	return val, ok
-}
-
-func getWrapErrorFromContext(ctx context.Context) (bool, bool) {
-    val, ok := ctx.Value(wrapErrorContextKey).(bool)
-    return val, ok
 }

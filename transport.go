@@ -30,9 +30,9 @@ var (
 	ErrSeekingBody = errors.New("error seeking body buffer back to beginning after attempt")
 
 	// ErrRetriesExhausted is a sentinel that signals all retry attempts have been exhausted.
-    // When WithWrapError is enabled, this error will wrap the last attempt's error to provide
-    // clearer context about why the request failed. A caller can identify this case using
-    // errors.Is(err, ErrRetriesExhausted).
+	// When WithWrapError is enabled, this error will wrap the last attempt's error to provide
+	// clearer context about why the request failed. A caller can identify this case using
+	// errors.Is(err, ErrRetriesExhausted).
 	ErrRetriesExhausted = errors.New("max retries exhausted")
 )
 
@@ -74,7 +74,6 @@ type (
 		preventRetryWithBody bool
 		attemptTimeout       time.Duration
 		initOnce             sync.Once
-		wrapError            bool
 	}
 )
 
@@ -167,12 +166,6 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		attemptTimeout = ctxAttemptTimeout
 	}
 
-	wrapError := t.wrapError
-	ctxWrapError, set := getWrapErrorFromContext(ctx)
-	if set {
-    	wrapError = ctxWrapError
-	}
-
 	for {
 		// set per-attempt timeout if needed
 		var cancel context.CancelFunc = func() {}
@@ -192,8 +185,8 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 
 		if attemptCount-1 >= maxRetries {
-			if wrapError {
-				err = fmt.Errorf("%w: %s", ErrRetriesExhausted, err)
+			if err != nil {
+				err = errors.Join(ErrRetriesExhausted, err)
 			}
 			return injectCancelReader(res, cancel), err
 		}
