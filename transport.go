@@ -30,8 +30,8 @@ var (
 	ErrSeekingBody = errors.New("error seeking body buffer back to beginning after attempt")
 
 	// ErrRetriesExhausted is a sentinel that signals all retry attempts have been exhausted.
-	// When WithWrapError is enabled, this error will wrap the last attempt's error to provide
-	// clearer context about why the request failed. A caller can identify this case using
+	// This error will be joined with the last attempt's error to prvide clearer context
+	// about why the request failed. A caller can identify this case using
 	// errors.Is(err, ErrRetriesExhausted).
 	ErrRetriesExhausted = errors.New("max retries exhausted")
 )
