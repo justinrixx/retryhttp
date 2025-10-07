@@ -3,6 +3,7 @@ package retryhttp_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -338,6 +339,54 @@ func TestTransport_RoundTrip(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRetriesExhaustedError(t *testing.T) {
+	// Create a server that closes connections to trigger errors
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Close connection immediately to trigger EOF
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("server doesn't support hijacking")
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			t.Fatal(err)
+		}
+		conn.Close()
+	}))
+	defer ts.Close()
+
+	t.Run("with wrap error enabled", func(t *testing.T) {
+		tr := retryhttp.New(
+			retryhttp.WithMaxRetries(2),
+			retryhttp.WithDelayFn(func(_ retryhttp.Attempt) time.Duration {
+				return 0
+			}),
+			retryhttp.WithShouldRetryFn(func(attempt retryhttp.Attempt) bool {
+				return attempt.Err != nil // Ensures EOF errors are retried
+			}),
+		)
+
+		client := http.Client{
+			Transport: tr,
+		}
+
+		req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
+		if err != nil {
+			t.Fatalf("error creating request: %s", err)
+		}
+
+		_, err = client.Do(req)
+		if err == nil {
+			t.Fatal("expected error but got nil")
+		}
+
+		// Check that the error is wrapped with ErrRetriesExhausted
+		if !errors.Is(err, retryhttp.ErrRetriesExhausted) {
+			t.Errorf("expected error to be wrapped with ErrRetriesExhausted, got: %v", err)
+		}
+	})
 }
 
 func TestPerAttemptTimeout(t *testing.T) {

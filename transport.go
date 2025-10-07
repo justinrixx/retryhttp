@@ -28,6 +28,12 @@ var (
 	// returned in a new error wrapping this sentinel. A caller can identify this case using
 	// errors.Is(err, ErrSeekingBody).
 	ErrSeekingBody = errors.New("error seeking body buffer back to beginning after attempt")
+
+	// ErrRetriesExhausted is a sentinel that signals all retry attempts have been exhausted.
+	// This error will be joined with the last attempt's error to provide clearer context
+	// about why the request failed. A caller can identify this case using
+	// errors.Is(err, ErrRetriesExhausted).
+	ErrRetriesExhausted = errors.New("max retries exhausted")
 )
 
 type (
@@ -174,7 +180,14 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		res, err := t.rt.RoundTrip(reqWithTimeout)
 		attemptCount++
 
-		if preventRetry || attemptCount-1 >= maxRetries {
+		if preventRetry {
+			return injectCancelReader(res, cancel), err
+		}
+
+		if attemptCount-1 >= maxRetries {
+			if err != nil {
+				err = errors.Join(ErrRetriesExhausted, err)
+			}
 			return injectCancelReader(res, cancel), err
 		}
 
