@@ -206,7 +206,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		delay := delayFn(attempt)
 		if br != nil {
 			if _, serr := br.Seek(0, 0); serr != nil {
-				return injectCancelReader(res, cancel), fmt.Errorf("%w: %s", ErrSeekingBody, err)
+				return injectCancelReader(res, cancel), fmt.Errorf("%w: %s", ErrSeekingBody, serr)
 			}
 			reqWithTimeout.Body = io.NopCloser(br)
 		}
